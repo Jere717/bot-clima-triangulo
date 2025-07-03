@@ -14,6 +14,7 @@ function guardarNoticiasEnviadas(data) {
 
 // (Definición duplicada eliminada)
 // Carga variables de entorno
+
 import 'dotenv/config';
 import fetch from 'node-fetch';
 import pkg from 'whatsapp-web.js';
@@ -23,24 +24,39 @@ import qrcode from 'qrcode-terminal';
 import { Groq } from 'groq-sdk';
 import fs from 'fs';
 
+// Leer configuración de .config para saber si se debe incluir executablePath
+let configNoPath = false;
+try {
+  const configContent = fs.readFileSync('.config', 'utf8');
+  // Espera una línea como: noExecutablePath=true o false
+  const match = configContent.match(/noExecutablePath\s*=\s*(true|false)/i);
+  if (match) {
+    configNoPath = match[1].toLowerCase() === 'true';
+  }
+} catch {}
+
 const groq = new Groq(process.env.GROQ_API_KEY);
+const puppeteerConfig = {
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+    '--disable-gpu'
+  ],
+  headless: true,
+  defaultViewport: null,
+};
+if (!configNoPath) {
+  puppeteerConfig.executablePath = '/data/data/com.termux/files/usr/bin/chromium-browser';
+}
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: './sessions' }),
-  puppeteer: {
-    executablePath: '/data/data/com.termux/files/usr/bin/chromium',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu'
-    ],
-    headless: true,
-    defaultViewport: null,
-  }
+  puppeteer: puppeteerConfig
 });
 
 client.on('qr', qr => {
