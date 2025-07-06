@@ -1,0 +1,11 @@
+🖼️ *Ilustración digital estilo gouache pintado* de {{localidad}}, Chubut, Argentina, resumiendo una semana de {{tendencia_clima}} en {{temporada}}.
+
+- Escena que muestre: {{elementos_cotidianos}} con {{detalles_tendencia}}.
+- Estilo: gouache digital con pinceladas visibles, atmósfera emocional.
+- Colores: {{paleta_colores}} que reflejen la {{temporada}}.
+- Enfoque: {{enfoque_escena}}.
+
+Detalles específicos:
+{{detalles_especificos}}
+
+📌 Debe transmitir la sensación climática de toda la semana sin íconos meteorológicos, mostrando cómo el clima afecta la vida en {{localidad}} durante {{temporada}}.

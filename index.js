@@ -1,4 +1,14 @@
 import * as cheerio from 'cheerio';
+import 'dotenv/config';
+import fetch from 'node-fetch';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth, MessageMedia } = pkg;
+import qrcode from 'qrcode-terminal';
+import { Groq } from 'groq-sdk';
+import fs from 'fs';
+import Parser from 'rss-parser';
+import readline from 'readline';
+
 // Utilidad para evitar repetir noticias ya enviadas
 function cargarNoticiasEnviadas() {
   try {
@@ -12,23 +22,10 @@ function guardarNoticiasEnviadas(data) {
   fs.writeFileSync('./noticias_enviadas.json', JSON.stringify(data, null, 2));
 }
 
-// (Definición duplicada eliminada)
-// Carga variables de entorno
-
-import 'dotenv/config';
-import fetch from 'node-fetch';
-import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
-import qrcode from 'qrcode-terminal';
-// import cron from 'node-cron';
-import { Groq } from 'groq-sdk';
-import fs from 'fs';
-
 // Leer configuración de .config para saber si se debe incluir executablePath
 let configNoPath = false;
 try {
   const configContent = fs.readFileSync('.config', 'utf8');
-  // Espera una línea como: noExecutablePath=true o false
   const match = configContent.match(/noExecutablePath\s*=\s*(true|false)/i);
   if (match) {
     configNoPath = match[1].toLowerCase() === 'true';
@@ -36,6 +33,7 @@ try {
 } catch {}
 
 const groq = new Groq(process.env.GROQ_API_KEY);
+
 const puppeteerConfig = {
   args: [
     '--no-sandbox',
@@ -63,7 +61,6 @@ client.on('qr', qr => {
   qrcode.generate(qr, { small: true });
   console.log('Escanea este QR para vincular el bot de clima.');
 });
-import Parser from 'rss-parser';
 
 // Extrae noticias útiles de RSS para cada localidad
 async function getNoticiasUtiles() {
@@ -289,6 +286,185 @@ function weatherCodeToDesc(code) {
   return map[code] || 'Desconocido';
 }
 
+// Nueva función para determinar la temporada en Argentina
+function getTemporada() {
+  const now = new Date();
+  const month = now.getMonth() + 1; // Enero = 1, Diciembre = 12
+  const day = now.getDate();
+
+  // Hemisferio sur:
+  if ((month === 12 && day >= 21) || month <= 2 || (month === 3 && day < 21)) {
+    return 'verano';
+  } else if (month >= 3 && month <= 5 || (month === 6 && day < 21)) {
+    return 'otoño';
+  } else if ((month === 6 && day >= 21) || month <= 8 || (month === 9 && day < 21)) {
+    return 'invierno';
+  } else {
+    return 'primavera';
+  }
+}
+
+// Función para determinar el momento del día
+function getMomentoDia() {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return 'mañana';
+  if (hora >= 12 && hora < 17) return 'tarde';
+  if (hora >= 17 && hora < 20) return 'atardecer';
+  return 'noche';
+}
+
+// Función para generar imagen del clima
+async function generarImagenClima(localidad, datosClima, tipo = 'diario') {
+  try {
+    // Detalles específicos por localidad
+    const elementosCotidianos = {
+      'Lago Puelo': 'ropa colgada, humo de estufas, barro en botas, lago de fondo',
+      'El Hoyo': 'huertas, cerros, artesanías, gente en bicicleta',
+      'El Bolsón': 'feria artesanal, montañas, jardines florecidos'
+    };
+
+    // Detalles según el clima
+    const detallesClima = {
+      'Despejado': 'cielo azul intenso, sombras marcadas, luz solar directa',
+      'Principalmente despejado': 'algunas nubes dispersas, luz solar difusa',
+      'Parcialmente nublado': 'mezcla de sol y nubes, claros ocasionales',
+      'Nublado': 'cielo completamente cubierto, luz uniforme y difusa',
+      'Lluvia ligera': 'charcos en el suelo, gotas en superficies, paraguas',
+      'Lluvia moderada': 'lluvia visible, calles mojadas, gente con impermeables',
+      'Lluvia intensa': 'torrentes de agua, techos goteando, visibilidad reducida',
+      'Nieve ligera': 'copos cayendo, capa delgada en superficies',
+      'Nieve intensa': 'acumulación notable, árboles nevados',
+      'Niebla': 'visibilidad reducida, atmósfera misteriosa',
+      'Tormenta': 'cielos oscuros, relámpagos en la distancia'
+    };
+
+    // Paletas de colores según clima y temporada
+    const paletasTemporada = {
+      verano: {
+        'Despejado': 'tonos cálidos vibrantes, amarillos intensos',
+        'Lluvia': 'grises con toques verdes frescos',
+        'default': 'colores vivos y saturados'
+      },
+      otoño: {
+        'Despejado': 'ocres, dorados, rojizos',
+        'Lluvia': 'marrones terrosos, grises cálidos',
+        'default': 'tonos tierra, rojizos, amarillos apagados'
+      },
+      invierno: {
+        'Despejado': 'azules fríos, blancos brillantes',
+        'Nieve': 'blancos puros, azules muy claros',
+        'default': 'tonos fríos, azules y grises'
+      },
+      primavera: {
+        'Despejado': 'pasteles brillantes, verdes frescos',
+        'Lluvia': 'verdes intensos, grises azulados',
+        'default': 'colores florecidos, tonos alegres'
+      }
+    };
+
+    // Detalles específicos por temporada
+    const detallesTemporada = {
+      verano: 'flores silvestres, insectos, frutas maduras',
+      otoño: 'hojas secas, ramas desnudas, cosechas',
+      invierno: 'chimeneas humeantes, ropa abrigada',
+      primavera: 'flores brotando, pájaros, renacer'
+    };
+
+    // Obtener temporada y momento del día
+    const temporada = getTemporada();
+    const momentoDia = getMomentoDia();
+    const clima = tipo === 'semanal' ? datosClima.tendencia : datosClima.clima;
+
+    // Seleccionar paleta de colores
+    let paletaColores = paletasTemporada[temporada]['default'];
+    if (paletasTemporada[temporada][clima]) {
+      paletaColores = paletasTemporada[temporada][clima];
+    } else {
+      // Buscar coincidencia parcial (ej. "Lluvia ligera" coincide con "Lluvia")
+      for (const key in paletasTemporada[temporada]) {
+        if (clima.includes(key)) {
+          paletaColores = paletasTemporada[temporada][key];
+          break;
+        }
+      }
+    }
+
+    // Determinar detalles específicos
+    let detallesEspecificos = detallesTemporada[temporada] + '. ';
+    
+    if (clima.includes('Lluvia')) {
+      detallesEspecificos += 'Personas con paraguas o impermeables. ';
+    }
+    if (clima.includes('Nieve')) {
+      detallesEspecificos += 'Huellas en la nieve, niños jugando. ';
+    }
+    if (clima.includes('Viento')) {
+      detallesEspecificos += 'Árboles inclinados, hojas volando. ';
+    }
+
+    // Ajustes por momento del día
+    const ajustesMomento = {
+      mañana: 'luz matutina suave, rocío en las plantas',
+      tarde: 'luz solar intensa, sombras definidas',
+      atardecer: 'tonos anaranjados y rosados, sombras alargadas',
+      noche: 'iluminación artificial cálida, luces en ventanas'
+    };
+
+    detallesEspecificos += ajustesMomento[momentoDia];
+
+    // Seleccionar el archivo de prompt adecuado
+    const promptFile = tipo === 'semanal' ? './prompt_semanal_img.txt' : './prompt_diario_img.txt';
+    let prompt = fs.readFileSync(promptFile, 'utf8');
+
+    // Reemplazar variables
+    prompt = prompt
+      .replace(/{{localidad}}/g, localidad)
+      .replace(/{{elementos_cotidianos}}/g, elementosCotidianos[localidad] || 'escena cotidiana')
+      .replace(/{{detalles_clima}}/g, detallesClima[clima] || '')
+      .replace(/{{tendencia_clima}}/g, tipo === 'semanal' ? datosClima.tendencia : '')
+      .replace(/{{descripcion_clima}}/g, tipo !== 'semanal' ? datosClima.clima : '')
+      .replace(/{{paleta_colores}}/g, paletaColores)
+      .replace(/{{detalles_especificos}}/g, detallesEspecificos)
+      .replace(/{{enfoque_escena}}/g, tipo === 'semanal' ? 'panorámica que muestre el paso del tiempo' : 'momento cotidiano')
+      .replace(/{{temporada}}/g, temporada)
+      .replace(/{{momento_dia}}/g, momentoDia);
+
+    console.log("Prompt mejorado con temporada y hora:", prompt);
+
+    // Resto del código para generar la imagen...
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          inputs: prompt,
+          parameters: {
+            width: 1024,
+            height: 768,
+            num_inference_steps: 30,
+            guidance_scale: 7.5
+          }
+        }),
+      }
+    );
+
+    if (!response.ok) throw new Error(`Error en HuggingFace: ${response.status}`);
+
+    const imageBuffer = await response.arrayBuffer();
+    const tempImagePath = `./temp_${localidad.replace(/\s+/g, '_')}.png`;
+    fs.writeFileSync(tempImagePath, Buffer.from(imageBuffer));
+
+    return tempImagePath;
+  } catch (error) {
+    console.error('Error al generar imagen:', error);
+    return null;
+  }
+}
+
 async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
   // Selecciona el prompt según el tipo
   let promptFile = './prompt_diario.txt';
@@ -337,8 +513,6 @@ async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
   });
   return response.choices[0].message.content;
 }
-
-import readline from 'readline';
 
 client.on('ready', async () => {
   console.log('Bot listo y conectado a WhatsApp!');
@@ -443,47 +617,46 @@ async function enviarMensajePrueba() {
 async function enviarInforme(tipo) {
   const grupoId = process.env.GRUPO_ID;
   let mensaje = '';
-  if (tipo === 'semanal') {
-    // Solo reporte semanal (solo clima)
-    const climaPuelo = await getClimaSemanal('Lago Puelo');
-    const climaHoyo = await getClimaSemanal('El Hoyo');
-    const climaBolson = await getClimaSemanal('El Bolsón');
-    mensaje = await generarMensajeClima(climaPuelo, climaHoyo, climaBolson, 'semanal');
-  } else if (tipo === 'diario') {
-    // Solo reporte diario (solo clima)
-    const climaPuelo = await getClimaActual('Lago Puelo');
-    const climaHoyo = await getClimaActual('El Hoyo');
-    const climaBolson = await getClimaActual('El Bolsón');
-    mensaje = await generarMensajeClima(climaPuelo, climaHoyo, climaBolson, 'diario');
-  } else if (tipo === 'lunes') {
-    // Lunes especial: clima diario, semanal y noticias de cada localidad
-    const climaPuelo = await getClimaActual('Lago Puelo');
-    const climaHoyo = await getClimaActual('El Hoyo');
-    const climaBolson = await getClimaActual('El Bolsón');
+  let imagenUrl = null;
+
+  // Obtener datos del clima una sola vez
+  const datos = {
+    'Lago Puelo': tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
+    'El Hoyo': tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
+    'El Bolsón': tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón')
+  };
+
+  // Manejar cada tipo de informe
+  if (tipo === 'semanal' || tipo === 'diario') {
+    mensaje = await generarMensajeClima(datos['Lago Puelo'], datos['El Hoyo'], datos['El Bolsón'], tipo);
+    imagenUrl = await generarImagenClima('Lago Puelo', datos['Lago Puelo'], tipo);
+  } 
+  else if (tipo === 'lunes') {
+    const noticias = await getNoticiasUtiles();
     const climaPueloSem = await getClimaSemanal('Lago Puelo');
     const climaHoyoSem = await getClimaSemanal('El Hoyo');
     const climaBolsonSem = await getClimaSemanal('El Bolsón');
-    const noticias = await getNoticiasUtiles();
+    
     let promptBase = fs.readFileSync('./prompt_lunes.txt', 'utf8');
     const hoy = new Date();
     const fecha_hoy = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth()+1).padStart(2, '0')}/${hoy.getFullYear()}`;
     const fin = new Date(hoy);
     fin.setDate(hoy.getDate() + 6);
-    const fecha_inicio = fecha_hoy;
     const fecha_fin = `${String(fin.getDate()).padStart(2, '0')}/${String(fin.getMonth()+1).padStart(2, '0')}/${fin.getFullYear()}`;
+    
     promptBase = promptBase
       .replace(/\{\{fecha_hoy\}\}/g, fecha_hoy)
-      .replace(/\{\{fecha_inicio\}\}/g, fecha_inicio)
+      .replace(/\{\{fecha_inicio\}\}/g, fecha_hoy)
       .replace(/\{\{fecha_fin\}\}/g, fecha_fin)
-      .replace(/\{\{puelo\.temp\}\}/g, climaPuelo.temp)
-      .replace(/\{\{puelo\.clima\}\}/g, climaPuelo.clima)
-      .replace(/\{\{puelo\.viento\}\}/g, climaPuelo.viento)
-      .replace(/\{\{hoyo\.temp\}\}/g, climaHoyo.temp)
-      .replace(/\{\{hoyo\.clima\}\}/g, climaHoyo.clima)
-      .replace(/\{\{hoyo\.viento\}\}/g, climaHoyo.viento)
-      .replace(/\{\{bolson\.temp\}\}/g, climaBolson.temp)
-      .replace(/\{\{bolson\.clima\}\}/g, climaBolson.clima)
-      .replace(/\{\{bolson\.viento\}\}/g, climaBolson.viento)
+      .replace(/\{\{puelo\.temp\}\}/g, datos['Lago Puelo'].temp)
+      .replace(/\{\{puelo\.clima\}\}/g, datos['Lago Puelo'].clima)
+      .replace(/\{\{puelo\.viento\}\}/g, datos['Lago Puelo'].viento)
+      .replace(/\{\{hoyo\.temp\}\}/g, datos['El Hoyo'].temp)
+      .replace(/\{\{hoyo\.clima\}\}/g, datos['El Hoyo'].clima)
+      .replace(/\{\{hoyo\.viento\}\}/g, datos['El Hoyo'].viento)
+      .replace(/\{\{bolson\.temp\}\}/g, datos['El Bolsón'].temp)
+      .replace(/\{\{bolson\.clima\}\}/g, datos['El Bolsón'].clima)
+      .replace(/\{\{bolson\.viento\}\}/g, datos['El Bolsón'].viento)
       .replace(/\{\{puelo\.min\}\}/g, climaPueloSem.min)
       .replace(/\{\{puelo\.max\}\}/g, climaPueloSem.max)
       .replace(/\{\{puelo\.tendencia\}\}/g, climaPueloSem.tendencia)
@@ -502,14 +675,18 @@ async function enviarInforme(tipo) {
       .replace(/\{\{noticia3\.titulo\}\}/g, noticias['El Bolsón']?.titulo || 'Sin noticia')
       .replace(/\{\{noticia3\.resumen\}\}/g, noticias['El Bolsón']?.resumen || '')
       .replace(/\{\{noticia3\.link\}\}/g, noticias['El Bolsón']?.link || '');
+
     mensaje = (await groq.chat.completions.create({
       messages: [{ role: "user", content: promptBase }],
       model: "llama3-70b-8192",
     })).choices[0].message.content;
-  } else if (tipo === 'noticias') {
-    // Solo noticias y recomendación
+    
+    imagenUrl = await generarImagenClima('Lago Puelo', datos['Lago Puelo'], 'lunes');
+  } 
+  else if (tipo === 'noticias') {
     const noticias = await getNoticiasUtiles();
     const noticiasArr = Object.values(noticias).filter(Boolean).slice(0,2);
+    
     let promptBase = fs.readFileSync('./prompt_noticias.txt', 'utf8');
     promptBase = promptBase
       .replace(/\{\{noticia1\.titulo\}\}/g, noticiasArr[0]?.titulo || 'Sin noticia')
@@ -518,13 +695,28 @@ async function enviarInforme(tipo) {
       .replace(/\{\{noticia2\.titulo\}\}/g, noticiasArr[1]?.titulo || 'Sin noticia')
       .replace(/\{\{noticia2\.resumen\}\}/g, noticiasArr[1]?.resumen || '')
       .replace(/\{\{noticia2\.link\}\}/g, noticiasArr[1]?.link || '');
+
     mensaje = (await groq.chat.completions.create({
       messages: [{ role: "user", content: promptBase }],
       model: "llama3-70b-8192",
     })).choices[0].message.content;
   }
+
+  // Enviar mensaje con/sin imagen
+  if (imagenUrl) {
+    try {
+      const media = MessageMedia.fromFilePath(imagenUrl);
+      await client.sendMessage(grupoId, media, { caption: mensaje });
+      fs.unlinkSync(imagenUrl);
+      console.log('Informe con imagen enviado al grupo.');
+      return;
+    } catch (error) {
+      console.error('Error al enviar imagen:', error);
+    }
+  }
+  
   await client.sendMessage(grupoId, mensaje);
-  console.log('Informe enviado al grupo.');
+  console.log('Informe enviado al grupo (sin imagen).');
 }
 
 // El bot solo envía mensajes automáticos, no responde a comandos del grupo.

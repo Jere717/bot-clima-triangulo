@@ -1,0 +1,11 @@
+🖼️ *Ilustración digital estilo gouache pintado* de {{localidad}}, Chubut, Argentina, durante un {{momento_dia}} de {{descripcion_clima}} en {{temporada}}.
+
+- Escena que muestre: {{elementos_cotidianos}} con {{detalles_clima}}.
+- Estilo: gouache digital con pinceladas visibles, atmósfera emocional.
+- Colores: {{paleta_colores}} que reflejen la {{temporada}}.
+- Enfoque: {{enfoque_escena}}.
+
+Detalles específicos:
+{{detalles_especificos}}
+
+📌 Debe transmitir la sensación del clima actual sin íconos meteorológicos, capturando la esencia de {{localidad}} en {{temporada}}.
