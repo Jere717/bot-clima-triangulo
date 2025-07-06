@@ -33,6 +33,7 @@ try {
 } catch {}
 
 const groq = new Groq(process.env.GROQ_API_KEY);
+let GENERAR_IMAGENES = false; // Cambiar a false para desactivar imágenes
 
 const puppeteerConfig = {
   args: [
@@ -565,6 +566,8 @@ async function mostrarMenu() {
     console.log(`\nNo se pudo obtener información del grupo (${grupoId}). Verifica el ID.`);
   }
 
+  console.log(`\nConfiguración actual: Generación de imágenes ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -574,9 +577,10 @@ async function mostrarMenu() {
   console.log('1. Enviar informe diario (clima)');
   console.log('2. Enviar informe semanal (clima semanal)');
   console.log('3. Enviar mensaje de prueba');
-  console.log('4. Salir');
+  console.log('4. Cambiar estado de generación de imágenes');
+  console.log('5. Salir');
 
-  rl.question('Elige una opción (1-4): ', async (opcion) => {
+  rl.question('Elige una opción (1-5): ', async (opcion) => {
     if (opcion === '1') {
       await enviarInforme('diario');
       rl.close();
@@ -590,6 +594,11 @@ async function mostrarMenu() {
       rl.close();
       mostrarMenu();
     } else if (opcion === '4') {
+      GENERAR_IMAGENES = !GENERAR_IMAGENES;
+      console.log(`Generación de imágenes ahora ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
+      rl.close();
+      mostrarMenu();
+    } else if (opcion === '5') {
       console.log('Saliendo...');
       rl.close();
       process.exit(0);
@@ -600,6 +609,7 @@ async function mostrarMenu() {
     }
   });
 }
+
 async function enviarMensajePrueba() {
   const grupoId = process.env.GRUPO_ID;
   try {
@@ -629,8 +639,10 @@ async function enviarInforme(tipo) {
   // Manejar cada tipo de informe
   if (tipo === 'semanal' || tipo === 'diario') {
     mensaje = await generarMensajeClima(datos['Lago Puelo'], datos['El Hoyo'], datos['El Bolsón'], tipo);
-    imagenUrl = await generarImagenClima('Lago Puelo', datos['Lago Puelo'], tipo);
-  } 
+    if (GENERAR_IMAGENES) {
+      imagenUrl = await generarImagenClima('Lago Puelo', datos['Lago Puelo'], tipo);
+    }
+  }
   else if (tipo === 'lunes') {
     const noticias = await getNoticiasUtiles();
     const climaPueloSem = await getClimaSemanal('Lago Puelo');
@@ -703,7 +715,7 @@ async function enviarInforme(tipo) {
   }
 
   // Enviar mensaje con/sin imagen
-  if (imagenUrl) {
+  if (imagenUrl && GENERAR_IMAGENES) {
     try {
       const media = MessageMedia.fromFilePath(imagenUrl);
       await client.sendMessage(grupoId, media, { caption: mensaje });
