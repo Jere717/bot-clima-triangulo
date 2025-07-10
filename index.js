@@ -33,7 +33,7 @@ try {
 } catch {}
 
 const groq = new Groq(process.env.GROQ_API_KEY);
-let GENERAR_IMAGENES = false; // Cambiar a false para desactivar imágenes
+let GENERAR_IMAGENES = true; // Cambiar a false para desactivar imágenes
 
 const puppeteerConfig = {
   args: [
@@ -183,29 +183,25 @@ const COORDS = {
 // Clima actual para informe diario
 async function getClimaActual(localidad) {
   const { lat, lon } = COORDS[localidad];
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=America%2FArgentina%2FBuenos_Aires`;
+  // Agregar daily=temperature_2m_max para obtener la máxima del día
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max&timezone=America%2FArgentina%2FBuenos_Aires`;
+  
   try {
     const response = await fetch(url);
     const data = await response.json();
     const w = data.current_weather;
-    if (!w || typeof w.weathercode === 'undefined') {
-      console.warn(`No se pudo obtener clima para ${localidad}. Respuesta:`, data);
-      return {
-        temp: 'N/D',
-        clima: 'No disponible',
-        viento: '-'
-      };
-    }
-    const weatherDesc = weatherCodeToDesc(w.weathercode);
+    
     return {
       temp: w.temperature,
-      clima: weatherDesc,
+      max: data.daily.temperature_2m_max[0], // Máxima del día
+      clima: weatherCodeToDesc(w.weathercode),
       viento: w.windspeed
     };
   } catch (error) {
     console.error(`Error al obtener clima para ${localidad}:`, error);
     return {
       temp: 'N/D',
+      max: 'N/D', // Máxima también "No disponible" en caso de error
       clima: 'No disponible',
       viento: '-'
     };
