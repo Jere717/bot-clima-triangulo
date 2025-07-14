@@ -743,13 +743,12 @@ async function enviarInforme(tipo) {
 
 if (import.meta.main) {
   const modo = process.argv[2];
-  if (modo === 'diario') {
-    enviarInformeDiario();
-  } else if (modo === 'semanal') {
-    enviarInformeSemanal();
+  if (modo === 'diario' || modo === 'semanal' || modo === 'lunes' || modo === 'noticias') {
+    enviarInforme(modo);
   } else {
-    console.log('ℹ️ Usá: node bot.js diario | semanal');
+    console.log('ℹ️ Usá: node index.js diario | semanal | lunes | noticias');
+    process.exit(0);
   }
 } else {
-  client.initialize(); // Solo se ejecuta si el archivo es importado o lanzado sin argumentos
+  client.initialize(); // Para cuando se ejecuta sin argumentos
 }
