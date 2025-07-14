@@ -33,7 +33,7 @@ try {
 } catch {}
 
 const groq = new Groq(process.env.GROQ_API_KEY);
-let GENERAR_IMAGENES = true; // Cambiar a false para desactivar imágenes
+let GENERAR_IMAGENES = false; // Cambiar a false para desactivar imágenes
 
 const puppeteerConfig = {
   args: [
@@ -741,4 +741,15 @@ async function enviarInforme(tipo) {
 
 // El bot solo envía mensajes automáticos, no responde a comandos del grupo.
 
-client.initialize();
+if (import.meta.main) {
+  const modo = process.argv[2];
+  if (modo === 'diario') {
+    enviarInformeDiario();
+  } else if (modo === 'semanal') {
+    enviarInformeSemanal();
+  } else {
+    console.log('ℹ️ Usá: node bot.js diario | semanal');
+  }
+} else {
+  client.initialize(); // Solo se ejecuta si el archivo es importado o lanzado sin argumentos
+}
