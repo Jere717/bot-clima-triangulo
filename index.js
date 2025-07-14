@@ -624,6 +624,7 @@ async function enviarInforme(tipo) {
   const grupoId = process.env.GRUPO_ID;
   let mensaje = '';
   let imagenUrl = null;
+  let mensajeEnviado = false;
 
   // Obtener datos del clima una sola vez
   const datos = {
@@ -717,14 +718,25 @@ async function enviarInforme(tipo) {
       await client.sendMessage(grupoId, media, { caption: mensaje });
       fs.unlinkSync(imagenUrl);
       console.log('Informe con imagen enviado al grupo.');
-      return;
+      mensajeEnviado = true;
     } catch (error) {
       console.error('Error al enviar imagen:', error);
     }
   }
-  
-  await client.sendMessage(grupoId, mensaje);
-  console.log('Informe enviado al grupo (sin imagen).');
+
+  // Enviar solo texto si falló la imagen o no hay imagen
+  if (!mensajeEnviado) {
+    await client.sendMessage(grupoId, mensaje);
+    console.log('Informe enviado al grupo (sin imagen).');
+  }
+
+  // --- Cierre seguro ---
+  if (process.argv.includes('--diario') || process.argv.includes('--semanal') || process.argv.includes('--noticias')) {
+    setTimeout(() => {
+      console.log('Cerrando proceso...');
+      process.exit(0);
+    }, 3000);
+  }
 }
 
 // El bot solo envía mensajes automáticos, no responde a comandos del grupo.
