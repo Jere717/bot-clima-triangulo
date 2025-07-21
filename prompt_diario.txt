@@ -9,18 +9,21 @@ IMPORTANTE: NO modifiques, corrijas ni reemplaces la fecha {{fecha_hoy}} bajo ni
 > 🌡️ Temp. actual: {{puelo.temp}}°C [Emoji_X] 
 > 🌡️ Temp. máxima: {{puelo.max}}°C [Emoji_X] 
 > 🌥️ Clima: {{puelo.clima}}
+> 🌧️ Lluvia: {{puelo.lluvia}}
 > 🍃 Viento: {{puelo.viento}} km/h
 
 📍 *El Hoyo*  
 > 🌡️ Temp. actual: {{hoyo.temp}}°C [Emoji_X] 
 > 🌡️ Temp. máxima: {{hoyo.max}}°C [Emoji_X] 
 > 🌥️ Clima: {{hoyo.clima}}
+> 🌧️ Lluvia: {{hoyo.lluvia}}
 > 🍃 Viento: {{hoyo.viento}} km/h
 
 📍 *El Bolsón*  
 > 🌡️ Temp. actual: {{bolson.temp}}°C [Emoji_X]
 > 🌡️ Temp. máxima: {{bolson.max}}°C [Emoji_X]  
 > 🌥️ Clima: {{bolson.clima}}
+> 🌧️ Lluvia: {{bolson.lluvia}}
 > 🍃 Viento: {{bolson.viento}} km/h
 
 🎯 Guía de estilo para el reporte diario:

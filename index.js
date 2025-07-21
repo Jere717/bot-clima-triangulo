@@ -183,19 +183,65 @@ const COORDS = {
 // Clima actual para informe diario
 async function getClimaActual(localidad) {
   const { lat, lon } = COORDS[localidad];
-  // Agregar daily=temperature_2m_max para obtener la máxima del día
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max&timezone=America%2FArgentina%2FBuenos_Aires`;
-  
+  // Agregar daily=temperature_2m_max,precipitation_sum y hourly=precipitation para obtener datos de lluvia
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,precipitation_sum&hourly=precipitation&timezone=America%2FArgentina%2FBuenos_Aires`;
+
   try {
     const response = await fetch(url);
     const data = await response.json();
     const w = data.current_weather;
-    
+    // Lluvia total esperada hoy (mm)
+    const lluviaTotal = data.daily?.precipitation_sum?.[0] ?? 0;
+    // Lluvia por hora (mm)
+    const horas = data.hourly?.time || [];
+    const lluviaPorHora = data.hourly?.precipitation || [];
+
+    // Determinar momentos de lluvia relevante
+    let lluviaMomentos = [];
+    for (let i = 0; i < horas.length; i++) {
+      if (lluviaPorHora[i] >= 0.2) { // 0.2mm o más se considera lluvia perceptible
+        const hora = parseInt(horas[i].slice(11, 13));
+        if (hora >= 5 && hora < 12) lluviaMomentos.push('mañana');
+        else if (hora >= 12 && hora < 17) lluviaMomentos.push('tarde');
+        else if (hora >= 17 && hora < 20) lluviaMomentos.push('atardecer');
+        else lluviaMomentos.push('noche');
+      }
+    }
+    // Agrupar y hacer el mensaje más natural
+    const bloques = [...new Set(lluviaMomentos)];
+    let lluviaResumen = '';
+    if (bloques.length === 1) {
+      lluviaResumen = `por la ${bloques[0]}`;
+    } else if (bloques.length === 2 && (
+      (bloques.includes('noche') && bloques.includes('mañana')) ||
+      (bloques.includes('mañana') && bloques.includes('tarde')) ||
+      (bloques.includes('tarde') && bloques.includes('atardecer')) ||
+      (bloques.includes('atardecer') && bloques.includes('noche'))
+    )) {
+      lluviaResumen = `entre la ${bloques[0]} y la ${bloques[1]}`;
+    } else if (bloques.length > 0) {
+      lluviaResumen = `en distintos momentos (${bloques.join(', ')})`;
+    }
+
+    // Clasificar intensidad
+    let intensidad = 'nada';
+    if (lluviaTotal >= 10) intensidad = 'lluvia intensa';
+    else if (lluviaTotal >= 5) intensidad = 'lluvia moderada';
+    else if (lluviaTotal >= 2) intensidad = 'lluvia ligera';
+    else if (lluviaTotal >= 0.2) intensidad = 'llovizna';
+
+    // Construir descripción de lluvia
+    let lluviaDesc = 'nada';
+    if (lluviaTotal >= 0.2) {
+      lluviaDesc = `${intensidad} ${lluviaResumen} (${lluviaTotal.toFixed(1)} mm)`;
+    }
+
     return {
       temp: w.temperature,
       max: data.daily.temperature_2m_max[0], // Máxima del día
       clima: weatherCodeToDesc(w.weathercode),
-      viento: w.windspeed
+      viento: w.windspeed,
+      lluvia: lluviaDesc
     };
   } catch (error) {
     console.error(`Error al obtener clima para ${localidad}:`, error);
@@ -203,7 +249,8 @@ async function getClimaActual(localidad) {
       temp: 'N/D',
       max: 'N/D', // Máxima también "No disponible" en caso de error
       clima: 'No disponible',
-      viento: '-'
+      viento: '-',
+      lluvia: 'No disponible'
     };
   }
 }
@@ -211,8 +258,8 @@ async function getClimaActual(localidad) {
 // Pronóstico semanal para informe semanal
 async function getClimaSemanal(localidad) {
   const { lat, lon } = COORDS[localidad];
-  // daily=temperature_2m_max,temperature_2m_min,weathercode
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode&forecast_days=7&timezone=America%2FArgentina%2FBuenos_Aires`;
+  // daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum&forecast_days=7&timezone=America%2FArgentina%2FBuenos_Aires`;
   try {
     const response = await fetch(url);
     const data = await response.json();
@@ -221,7 +268,8 @@ async function getClimaSemanal(localidad) {
       return {
         min: 'N/D',
         max: 'N/D',
-        tendencia: 'No disponible'
+        tendencia: 'No disponible',
+        dias: []
       };
     }
     const min = Math.min(...data.daily.temperature_2m_min);
@@ -229,17 +277,25 @@ async function getClimaSemanal(localidad) {
     // Tendencia: mayor weathercode de la semana
     const weatherCodes = data.daily.weathercode;
     const tendencia = weatherCodeToDesc(mostFrequent(weatherCodes));
+    // Recolectar datos diarios relevantes
+    const dias = data.daily.time.map((fecha, i) => ({
+      fecha,
+      weather: weatherCodeToDesc(data.daily.weathercode[i]),
+      lluvia: data.daily.precipitation_sum[i]
+    }));
     return {
       min,
       max,
-      tendencia
+      tendencia,
+      dias
     };
   } catch (error) {
     console.error(`Error al obtener pronóstico semanal para ${localidad}:`, error);
     return {
       min: 'N/D',
       max: 'N/D',
-      tendencia: 'No disponible'
+      tendencia: 'No disponible',
+      dias: []
     };
   }
 }
@@ -471,10 +527,72 @@ async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
     const promptBase = fs.readFileSync(promptFile, 'utf8');
     // Calcular fechas de inicio y fin (formato dd/mm/yyyy)
     const hoy = new Date();
-    const fecha_inicio = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth()+1).padStart(2, '0')}/${hoy.getFullYear()}`;
-    const fin = new Date(hoy);
-    fin.setDate(hoy.getDate() + 6);
+    let inicio, fin;
+    // Si hoy es domingo, mostrar lunes a viernes de la semana siguiente
+    if (hoy.getDay() === 0) { // Domingo
+      inicio = new Date(hoy);
+      inicio.setDate(hoy.getDate() + 1); // Lunes
+      fin = new Date(hoy);
+      fin.setDate(hoy.getDate() + 5); // Viernes
+    } else {
+      inicio = new Date(hoy);
+      fin = new Date(hoy);
+      fin.setDate(hoy.getDate() + 6);
+    }
+    const fecha_inicio = `${String(inicio.getDate()).padStart(2, '0')}/${String(inicio.getMonth()+1).padStart(2, '0')}/${inicio.getFullYear()}`;
     const fecha_fin = `${String(fin.getDate()).padStart(2, '0')}/${String(fin.getMonth()+1).padStart(2, '0')}/${fin.getFullYear()}`;
+
+    // --- Resumen de eventos relevantes y días con mayor probabilidad de lluvia ---
+    // Analiza los días de los tres lugares y arma un resumen visual
+    function formateaFecha(fechaISO) {
+      const d = new Date(fechaISO);
+      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}`;
+    }
+    // Recolectar eventos por fecha/lugar/intensidad
+    let eventosPorFecha = {};
+    function agregaEvento(dias, nombre) {
+      dias.forEach(d => {
+        let intensidad = '';
+        if (d.lluvia >= 5) intensidad = 'lluvia intensa';
+        else if (d.lluvia >= 1) intensidad = 'lluvia ligera';
+        else if (d.weather.toLowerCase().includes('tormenta')) intensidad = 'tormenta';
+        else return;
+        const fecha = formateaFecha(d.fecha);
+        if (!eventosPorFecha[fecha]) eventosPorFecha[fecha] = {};
+        if (!eventosPorFecha[fecha][intensidad]) eventosPorFecha[fecha][intensidad] = [];
+        eventosPorFecha[fecha][intensidad].push(nombre);
+      });
+    }
+    agregaEvento(datosPuelo.dias, 'Lago Puelo');
+    agregaEvento(datosHoyo.dias, 'El Hoyo');
+    agregaEvento(datosBolson.dias, 'El Bolsón');
+
+    // Construir resumen agrupado, solo desde fecha_inicio hasta fecha_fin
+    let resumen = '';
+    const inicioDate = new Date(inicio);
+    inicioDate.setHours(0,0,0,0);
+    const finDate = new Date(fin);
+    finDate.setHours(23,59,59,999);
+    function parseFecha(fechaStr) {
+      const [d, m] = fechaStr.split('/');
+      return new Date(inicioDate.getFullYear(), parseInt(m)-1, parseInt(d));
+    }
+    const fechas = Object.keys(eventosPorFecha).sort().filter(fecha => {
+      const f = parseFecha(fecha);
+      return f >= inicioDate && f <= finDate;
+    });
+    if (fechas.length) {
+      resumen = fechas.map(fecha => {
+        const intensidades = Object.keys(eventosPorFecha[fecha]);
+        return intensidades.map(intensidad => {
+          const lugares = eventosPorFecha[fecha][intensidad].join(', ');
+          return `${fecha}: ${intensidad} en ${lugares}`;
+        }).join('. ');
+      }).join('\n');
+    } else {
+      resumen = 'No se esperan lluvias ni eventos relevantes en estos días.';
+    }
+
     prompt = promptBase
       .replace(/\{\{fecha_inicio\}\}/g, fecha_inicio)
       .replace(/\{\{fecha_fin\}\}/g, fecha_fin)
@@ -486,7 +604,8 @@ async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
       .replace(/\{\{hoyo\.tendencia\}\}/g, datosHoyo.tendencia)
       .replace(/\{\{bolson\.min\}\}/g, datosBolson.min)
       .replace(/\{\{bolson\.max\}\}/g, datosBolson.max)
-      .replace(/\{\{bolson\.tendencia\}\}/g, datosBolson.tendencia);
+      .replace(/\{\{bolson\.tendencia\}\}/g, datosBolson.tendencia)
+      .replace(/\{\{resumen_eventos\}\}/g, resumen);
   } else {
     const promptBase = fs.readFileSync(promptFile, 'utf8');
     // Siempre usar la fecha local del sistema para el diario
@@ -495,14 +614,20 @@ async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
     prompt = promptBase
       .replace(/\{\{fecha_hoy\}\}/g, fecha_hoy)
       .replace(/\{\{puelo\.temp\}\}/g, datosPuelo.temp)
+      .replace(/\{\{puelo\.max\}\}/g, datosPuelo.max)
       .replace(/\{\{puelo\.clima\}\}/g, datosPuelo.clima)
       .replace(/\{\{puelo\.viento\}\}/g, datosPuelo.viento)
+      .replace(/\{\{puelo\.lluvia\}\}/g, datosPuelo.lluvia)
       .replace(/\{\{hoyo\.temp\}\}/g, datosHoyo.temp)
+      .replace(/\{\{hoyo\.max\}\}/g, datosHoyo.max)
       .replace(/\{\{hoyo\.clima\}\}/g, datosHoyo.clima)
       .replace(/\{\{hoyo\.viento\}\}/g, datosHoyo.viento)
+      .replace(/\{\{hoyo\.lluvia\}\}/g, datosHoyo.lluvia)
       .replace(/\{\{bolson\.temp\}\}/g, datosBolson.temp)
+      .replace(/\{\{bolson\.max\}\}/g, datosBolson.max)
       .replace(/\{\{bolson\.clima\}\}/g, datosBolson.clima)
-      .replace(/\{\{bolson\.viento\}\}/g, datosBolson.viento);
+      .replace(/\{\{bolson\.viento\}\}/g, datosBolson.viento)
+      .replace(/\{\{bolson\.lluvia\}\}/g, datosBolson.lluvia);
   }
   const response = await groq.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
@@ -571,20 +696,50 @@ async function mostrarMenu() {
 
   console.log('\n¿Qué deseas hacer?');
   console.log('1. Enviar informe diario (clima)');
+  console.log('1a. Generar informe diario y aprobar antes de enviar');
   console.log('2. Enviar informe semanal (clima semanal)');
+  console.log('2a. Generar informe semanal y aprobar antes de enviar');
   console.log('3. Enviar mensaje de prueba');
   console.log('4. Cambiar estado de generación de imágenes');
   console.log('5. Salir');
 
-  rl.question('Elige una opción (1-5): ', async (opcion) => {
-    if (opcion === '1') {
-      await enviarInforme('diario');
+  rl.question('Elige una opción (1, 1a, 2, 2a, 3, 4, 5): ', async (opcion) => {
+    if (opcion === '1' || opcion === '2') {
+      // Envío directo y guardado
+      const tipo = opcion === '1' ? 'diario' : 'semanal';
+      const mensaje = await generarMensajeClima(
+        tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
+        tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
+        tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
+        tipo
+      );
+      fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
+      await enviarInforme(tipo);
+      console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
       rl.close();
       mostrarMenu();
-    } else if (opcion === '2') {
-      await enviarInforme('semanal');
-      rl.close();
-      mostrarMenu();
+    } else if (opcion === '1a' || opcion === '2a') {
+      // Genera y espera aprobación
+      const tipo = opcion === '1a' ? 'diario' : 'semanal';
+      const mensaje = await generarMensajeClima(
+        tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
+        tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
+        tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
+        tipo
+      );
+      fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
+      console.log(`\n--- Vista previa del reporte (${tipo}) ---\n`);
+      console.log(mensaje);
+      rl.question('¿Enviar este reporte? (s/n): ', async (aprobacion) => {
+        if (aprobacion.trim().toLowerCase() === 's') {
+          await enviarInforme(tipo);
+          console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
+        } else {
+          console.log('Reporte NO enviado. Puedes revisar el archivo ./reporte_' + tipo + '.txt');
+        }
+        rl.close();
+        mostrarMenu();
+      });
     } else if (opcion === '3') {
       await enviarMensajePrueba();
       rl.close();

@@ -1,0 +1,25 @@
+🌦️ *Reporte Semanal del Clima* 🌦️  
+📅 _Semana del 21/07/2025 al 25/07/2025_
+
+📍 *Lago Puelo*  
+> 🌡️ Mínima: 0.1°C ☹️
+> 🌡️ Máxima: 10°C 😐
+> 🌥️ Tendencia climática: Lluvia ligera 
+
+📍 *El Hoyo*  
+> 🌡️ Mínima: -0.1°C 🥶
+> 🌡️ Máxima: 10°C 😐
+> 🌥️ Tendencia climática: Lluvia ligera 
+
+📍 *El Bolsón*  
+> 🌡️ Mínima: -0.1°C 🥶
+> 🌡️ Máxima: 10°C 😐
+> 🌥️ Tendencia climática: Lluvia ligera 
+
+🗓️ *Resumen de eventos y días lluviosos:*
+23/07: lluvia ligera en Lago Puelo, El Hoyo, El Bolsón
+24/07: lluvia intensa en Lago Puelo, El Hoyo, El Bolsón
+25/07: lluvia ligera en Lago Puelo, El Hoyo, El Bolsón
+
+🤖 *Mi recomendación útil de la semana:*
+"¡No te dejes caer por la lluvia! Lleva un paraguas con mango de madera, como los abuelos, para darle ese toque retro a tu look... y no te mojes 😜"

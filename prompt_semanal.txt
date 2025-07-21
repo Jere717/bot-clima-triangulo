@@ -23,6 +23,9 @@ IMPORTANTE: NO modifiques, corrijas ni reemplaces las fechas entre {{fecha_inici
 🎯 Guía de estilo para el reporte diario:
 - En cada [Emoji_X] usá 1 solo emoji de rostro humano para expresar con caras lo que transmite el dato (ejemplos: 🥶, 😐, 😄, 🥵 entre otros emojis expresivos), solo si tiene lógica real con los valores.
 
+🗓️ *Resumen de eventos y días lluviosos:*  
+{{resumen_eventos}}
+
 🤖 *Mi recomendación útil de la semana:*
 Escribí una sugerencia breve basada en el clima real de la semana.
 Tiene que ser útil, clara y práctica, como una advertencia vecinal, pero con un toque de personalidad robótica torpe: una palabra de más, un remate innecesario, una comparación literal, etc.
