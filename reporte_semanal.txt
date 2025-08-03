@@ -1,25 +1,23 @@
 🌦️ *Reporte Semanal del Clima* 🌦️  
-📅 _Semana del 21/07/2025 al 25/07/2025_
+📅 _Semana del 04/08/2025 al 08/08/2025_
 
 📍 *Lago Puelo*  
-> 🌡️ Mínima: 0.1°C ☹️
-> 🌡️ Máxima: 10°C 😐
-> 🌥️ Tendencia climática: Lluvia ligera 
+> 🌡️ Mínima: 1.2°C ❄️
+> 🌡️ Máxima: 12.3°C 😐
+> 🌥️ Tendencia climática: Nublado
 
 📍 *El Hoyo*  
-> 🌡️ Mínima: -0.1°C 🥶
-> 🌡️ Máxima: 10°C 😐
-> 🌥️ Tendencia climática: Lluvia ligera 
+> 🌡️ Mínima: 1°C 🥶
+> 🌡️ Máxima: 12.3°C 😐
+> 🌥️ Tendencia climática: Nublado
 
 📍 *El Bolsón*  
-> 🌡️ Mínima: -0.1°C 🥶
-> 🌡️ Máxima: 10°C 😐
-> 🌥️ Tendencia climática: Lluvia ligera 
+> 🌡️ Mínima: 1°C 🥶
+> 🌡️ Máxima: 12.3°C 😐
+> 🌥️ Tendencia climática: Nublado
 
-🗓️ *Resumen de eventos y días lluviosos:*
-23/07: lluvia ligera en Lago Puelo, El Hoyo, El Bolsón
-24/07: lluvia intensa en Lago Puelo, El Hoyo, El Bolsón
-25/07: lluvia ligera en Lago Puelo, El Hoyo, El Bolsón
+🗓️ *Resumen de eventos y días lluviosos - ⚠️ Experimental:*  
+04/08: lluvia casi nada en Lago Puelo, El Hoyo, El Bolsón
 
 🤖 *Mi recomendación útil de la semana:*
-"¡No te dejes caer por la lluvia! Lleva un paraguas con mango de madera, como los abuelos, para darle ese toque retro a tu look... y no te mojes 😜"
+"¡No te dejes sorprender por el frío! Asegurate de tener un gorro para esta semana, porque la temperatura mínima estará cerca de los 1°C. ¡Y no te olvides de llevar un paraguas, por si acaso! 😊"

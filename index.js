@@ -24,11 +24,16 @@ function guardarNoticiasEnviadas(data) {
 
 // Leer configuración de .config para saber si se debe incluir executablePath
 let configNoPath = false;
+let suspendOnSend = false;
 try {
   const configContent = fs.readFileSync('.config', 'utf8');
   const match = configContent.match(/noExecutablePath\s*=\s*(true|false)/i);
   if (match) {
     configNoPath = match[1].toLowerCase() === 'true';
+  }
+  const suspendMatch = configContent.match(/suspendOnSend\s*=\s*(true|false)/i);
+  if (suspendMatch) {
+    suspendOnSend = suspendMatch[1].toLowerCase() === 'true';
   }
 } catch {}
 
@@ -183,28 +188,31 @@ const COORDS = {
 // Clima actual para informe diario
 async function getClimaActual(localidad) {
   const { lat, lon } = COORDS[localidad];
-  // Agregar daily=temperature_2m_max,precipitation_sum y hourly=precipitation para obtener datos de lluvia
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&daily=temperature_2m_max,precipitation_sum&hourly=precipitation&timezone=America%2FArgentina%2FBuenos_Aires`;
 
   try {
     const response = await fetch(url);
     const data = await response.json();
     const w = data.current_weather;
-    // Lluvia total esperada hoy (mm)
-    const lluviaTotal = data.daily?.precipitation_sum?.[0] ?? 0;
-    // Lluvia por hora (mm)
-    const horas = data.hourly?.time || [];
+    
+    // Modificación aquí: cualquier valor < 1 mm se convierte a 0
+    let lluviaTotal = data.daily?.precipitation_sum?.[0] ?? 0;
+    lluviaTotal = lluviaTotal < 1 ? 0 : Math.floor(lluviaTotal); // Solo valores >= 1 se consideran
+    
     const lluviaPorHora = data.hourly?.precipitation || [];
+    const horas = data.hourly?.time || [];
 
-    // Determinar momentos de lluvia relevante
+    // Determinar momentos de lluvia relevante SOLO si lluviaTotal >= 1
     let lluviaMomentos = [];
-    for (let i = 0; i < horas.length; i++) {
-      if (lluviaPorHora[i] >= 0.2) { // 0.2mm o más se considera lluvia perceptible
-        const hora = parseInt(horas[i].slice(11, 13));
-        if (hora >= 5 && hora < 12) lluviaMomentos.push('mañana');
-        else if (hora >= 12 && hora < 17) lluviaMomentos.push('tarde');
-        else if (hora >= 17 && hora < 20) lluviaMomentos.push('atardecer');
-        else lluviaMomentos.push('noche');
+    if (lluviaTotal >= 1) {
+      for (let i = 0; i < horas.length; i++) {
+        if (lluviaPorHora[i] >= 0.2) {
+          const hora = parseInt(horas[i].slice(11, 13));
+          if (hora >= 5 && hora < 12) lluviaMomentos.push('mañana');
+          else if (hora >= 12 && hora < 17) lluviaMomentos.push('tarde');
+          else if (hora >= 17 && hora < 20) lluviaMomentos.push('atardecer');
+          else lluviaMomentos.push('noche');
+        }
       }
     }
     // Agrupar y hacer el mensaje más natural
@@ -223,22 +231,22 @@ async function getClimaActual(localidad) {
       lluviaResumen = `en distintos momentos (${bloques.join(', ')})`;
     }
 
-    // Clasificar intensidad
-    let intensidad = 'nada';
+    // Clasificar intensidad (solo aplica si lluviaTotal >= 1)
+    let intensidad = 'casi nada';
     if (lluviaTotal >= 10) intensidad = 'lluvia intensa';
     else if (lluviaTotal >= 5) intensidad = 'lluvia moderada';
     else if (lluviaTotal >= 2) intensidad = 'lluvia ligera';
-    else if (lluviaTotal >= 0.2) intensidad = 'llovizna';
+    else if (lluviaTotal >= 1) intensidad = 'llovizna';
 
     // Construir descripción de lluvia
-    let lluviaDesc = 'nada';
-    if (lluviaTotal >= 0.2) {
-      lluviaDesc = `${intensidad} ${lluviaResumen} (${lluviaTotal.toFixed(1)} mm)`;
+    let lluviaDesc = 'casi nada';
+    if (lluviaTotal >= 1) {
+      lluviaDesc = `${intensidad} ${lluviaResumen} (${lluviaTotal} mm)`;
     }
 
     return {
       temp: w.temperature,
-      max: data.daily.temperature_2m_max[0], // Máxima del día
+      max: data.daily.temperature_2m_max[0],
       clima: weatherCodeToDesc(w.weathercode),
       viento: w.windspeed,
       lluvia: lluviaDesc
@@ -247,7 +255,7 @@ async function getClimaActual(localidad) {
     console.error(`Error al obtener clima para ${localidad}:`, error);
     return {
       temp: 'N/D',
-      max: 'N/D', // Máxima también "No disponible" en caso de error
+      max: 'N/D',
       clima: 'No disponible',
       viento: '-',
       lluvia: 'No disponible'
@@ -636,59 +644,47 @@ async function generarMensajeClima(datosPuelo, datosHoyo, datosBolson, tipo) {
   return response.choices[0].message.content;
 }
 
-client.on('ready', async () => {
-  console.log('Bot listo y conectado a WhatsApp!');
 
-  // Reintentar mostrar grupos con menos de 4 integrantes hasta encontrarlos o agotar tiempo
-  // const maxTries = 20; // 20 segundos máximo
-  // let tries = 0;
-  // let gruposMostrados = false;
-  // const mostrarGrupos = async () => {
-  //   tries++;
-  //   try {
-  //     const chats = await client.getChats();
-  //     const gruposPequenos = chats.filter(
-  //       c => c.isGroup && c.participants && c.participants.length < 4
-  //     );
-  //     if (gruposPequenos.length > 0) {
-  //       console.log('Grupos con menos de 4 integrantes:');
-  //       gruposPequenos.forEach(g => {
-  //         console.log(`- ${g.name} (ID: ${g.id._serialized}) - Integrantes: ${g.participants.length}`);
-  //       });
-  //       gruposMostrados = true;
-  //       mostrarMenu();
-  //       return;
-  //     } else if (tries >= maxTries) {
-  //       console.log('No se encontraron grupos con menos de 4 integrantes tras varios intentos.');
-  //       mostrarMenu();
-  //       return;
-  //     }
-  //   } catch (e) {
-  //     if (tries >= maxTries) {
-  //       console.log('No se pudo obtener la lista de grupos tras varios intentos:', e);
-  //       mostrarMenu();
-  //       return;
-  //     }
-  //   }
-  //   setTimeout(mostrarGrupos, 1000);
-  // };
-  mostrarMenu();
+let clientReady = false;
+let pendingAction = null;
+client.on('ready', async () => {
+  clientReady = true;
+  console.log('Bot listo y conectado a WhatsApp!');
+  // Si hay una acción pendiente, ejecutarla
+  if (pendingAction) {
+    console.log('\nWhatsApp listo. Ejecutando acción pendiente...');
+    await pendingAction();
+    pendingAction = null;
+  }
 });
+
+// Mostrar menú apenas inicia el script
+mostrarMenu();
 
 async function mostrarMenu() {
   const grupoId = process.env.GRUPO_ID;
-  try {
-    const chat = await client.getChatById(grupoId);
-    const nombreGrupo = chat.name;
-    const cantidad = chat.participants ? chat.participants.length : 'N/D';
-    console.log(`\nDestino configurado: ${nombreGrupo} (ID: ${grupoId})`);
-    console.log(`Integrantes: ${cantidad}`);
-  } catch (e) {
-    console.log(`\nNo se pudo obtener información del grupo (${grupoId}). Verifica el ID.`);
+  // Mostrar menú siempre, pero si el cliente no está listo, avisar en las acciones
+  if (clientReady) {
+    try {
+      const chat = await client.getChatById(grupoId);
+      const nombreGrupo = chat.name;
+      const cantidad = chat.participants ? chat.participants.length : 'N/D';
+      console.log(`\nDestino configurado: ${nombreGrupo} (ID: ${grupoId})`);
+      console.log(`Integrantes: ${cantidad}`);
+    } catch (e) {
+      console.log(`\nNo se pudo obtener información del grupo (${grupoId}). Verifica el ID.`);
+    }
+  } else {
+    console.log('\nSincronizando con WhatsApp... Puedes elegir una opción y se enviará/aplicará automáticamente cuando el bot esté listo.');
+  }
+  console.log(`\nConfiguración actual: Generación de imágenes ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
+  if (suspendOnSend) {
+    console.log('⚠️  El sistema se suspenderá automáticamente después de enviar un informe directo (1 o 2).');
+  } else {
+    console.log('ℹ️  La suspensión automática está desactivada. El sistema NO se suspenderá tras el envío.');
   }
 
-  console.log(`\nConfiguración actual: Generación de imágenes ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
-
+  // Crear SIEMPRE una nueva instancia de readline
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -704,59 +700,89 @@ async function mostrarMenu() {
   console.log('5. Salir');
 
   rl.question('Elige una opción (1, 1a, 2, 2a, 3, 4, 5): ', async (opcion) => {
-    if (opcion === '1' || opcion === '2') {
-      // Envío directo y guardado
-      const tipo = opcion === '1' ? 'diario' : 'semanal';
-      const mensaje = await generarMensajeClima(
-        tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
-        tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
-        tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
-        tipo
-      );
-      fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
-      await enviarInforme(tipo);
-      console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
-      rl.close();
-      mostrarMenu();
-    } else if (opcion === '1a' || opcion === '2a') {
-      // Genera y espera aprobación
-      const tipo = opcion === '1a' ? 'diario' : 'semanal';
-      const mensaje = await generarMensajeClima(
-        tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
-        tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
-        tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
-        tipo
-      );
-      fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
-      console.log(`\n--- Vista previa del reporte (${tipo}) ---\n`);
-      console.log(mensaje);
-      rl.question('¿Enviar este reporte? (s/n): ', async (aprobacion) => {
-        if (aprobacion.trim().toLowerCase() === 's') {
-          await enviarInforme(tipo);
-          console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
-        } else {
-          console.log('Reporte NO enviado. Puedes revisar el archivo ./reporte_' + tipo + '.txt');
+    // Función para ejecutar la acción elegida
+    const ejecutarOpcion = async () => {
+      if (opcion === '1' || opcion === '2') {
+        // Envío directo y guardado
+        const tipo = opcion === '1' ? 'diario' : 'semanal';
+        const mensaje = await generarMensajeClima(
+          tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
+          tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
+          tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
+          tipo
+        );
+        fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
+        await enviarInforme(tipo);
+        console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
+        // Suspender si está activado en config
+        if (suspendOnSend) {
+          console.log('Suspensión automática activada. Suspendiendo el sistema...');
+          const { exec } = await import('child_process');
+          exec('systemctl suspend', (error) => {
+            if (error) {
+              console.error('Error al intentar suspender:', error);
+            }
+          });
         }
         rl.close();
         mostrarMenu();
-      });
-    } else if (opcion === '3') {
-      await enviarMensajePrueba();
+      } else if (opcion === '1a' || opcion === '2a') {
+        // Genera y espera aprobación
+        const tipo = opcion === '1a' ? 'diario' : 'semanal';
+        const mensaje = await generarMensajeClima(
+          tipo === 'semanal' ? await getClimaSemanal('Lago Puelo') : await getClimaActual('Lago Puelo'),
+          tipo === 'semanal' ? await getClimaSemanal('El Hoyo') : await getClimaActual('El Hoyo'),
+          tipo === 'semanal' ? await getClimaSemanal('El Bolsón') : await getClimaActual('El Bolsón'),
+          tipo
+        );
+        fs.writeFileSync(`./reporte_${tipo}.txt`, mensaje);
+        console.log(`\n--- Vista previa del reporte (${tipo}) ---\n`);
+        console.log(mensaje);
+        // Crear una nueva instancia de readline para la aprobación
+        const rlAprobar = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        rlAprobar.question('¿Enviar este reporte? (s/n): ', async (aprobacion) => {
+          if (aprobacion.trim().toLowerCase() === 's') {
+            await enviarInforme(tipo);
+            console.log(`Reporte ${tipo} enviado y guardado en ./reporte_${tipo}.txt`);
+          } else {
+            console.log('Reporte NO enviado. Puedes revisar el archivo ./reporte_' + tipo + '.txt');
+          }
+          rlAprobar.close();
+          mostrarMenu();
+        });
+        rl.close();
+        return;
+      } else if (opcion === '3') {
+        await enviarMensajePrueba();
+        rl.close();
+        mostrarMenu();
+      } else if (opcion === '4') {
+        GENERAR_IMAGENES = !GENERAR_IMAGENES;
+        console.log(`Generación de imágenes ahora ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
+        rl.close();
+        mostrarMenu();
+      } else if (opcion === '5') {
+        console.log('Saliendo...');
+        rl.close();
+        process.exit(0);
+      } else {
+        console.log('Opción no válida.');
+        rl.close();
+        mostrarMenu();
+      }
+    };
+
+    if (!clientReady && (opcion === '1' || opcion === '2' || opcion === '1a' || opcion === '2a' || opcion === '3')) {
+      console.log('El bot aún no está listo, tu acción quedará en espera y se enviará automáticamente cuando esté conectado.');
+      pendingAction = ejecutarOpcion;
       rl.close();
-      mostrarMenu();
-    } else if (opcion === '4') {
-      GENERAR_IMAGENES = !GENERAR_IMAGENES;
-      console.log(`Generación de imágenes ahora ${GENERAR_IMAGENES ? 'ACTIVADA' : 'DESACTIVADA'}`);
-      rl.close();
-      mostrarMenu();
-    } else if (opcion === '5') {
-      console.log('Saliendo...');
-      rl.close();
-      process.exit(0);
+      // No mostrar menú de nuevo hasta que se ejecute la acción pendiente
+      return;
     } else {
-      console.log('Opción no válida.');
-      rl.close();
-      mostrarMenu();
+      await ejecutarOpcion();
     }
   });
 }

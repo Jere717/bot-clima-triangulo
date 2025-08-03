@@ -20,11 +20,17 @@ IMPORTANTE: NO modifiques, corrijas ni reemplaces las fechas entre {{fecha_inici
 > 🌡️ Máxima: {{puelo.max}}°C [Emoji_X]
 > 🌥️ Tendencia climática: {{bolson.tendencia}} 
 
-🎯 Guía de estilo para el reporte diario:
+🎯 Guía de estilo para el reporte semanal:
 - En cada [Emoji_X] usá 1 solo emoji de rostro humano para expresar con caras lo que transmite el dato (ejemplos: 🥶, 😐, 😄, 🥵 entre otros emojis expresivos), solo si tiene lógica real con los valores.
 
-🗓️ *Resumen de eventos y días lluviosos:*  
+🗓️ *Resumen de eventos y días lluviosos - ⚠️ Experimental:*  
 {{resumen_eventos}}
+
+🎯 Guía de estilo para el resumen semanal:
+1. SIEMPRE muestra "casi nada" cuando lluvia < 1mm (aunque la API diga 0.2mm)  
+2. NUNCA uses términos como "ligera", "leve" o "llovizna" para valores < 1mm  
+3. Si el valor de lluvia es "casi nada", DEBE aparecer exactamente así   
+Estás integrado con una API meteorológica profesional. Los valores de lluvia YA fueron procesados según protocolos científicos. Tu trabajo es MOSTRARLOS, no interpretarlos. Cualquier "corrección" alteraría sistemas de alerta.
 
 🤖 *Mi recomendación útil de la semana:*
 Escribí una sugerencia breve basada en el clima real de la semana.
